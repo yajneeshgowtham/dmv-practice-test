@@ -1,4 +1,5 @@
-// California DMV-style practice test. Official format: Class C = 46 questions (max 8 wrong), M1 = 25 questions (max 3 wrong).
+// California DMV-style practice test.
+// Test formats (46 / 8 and 25 / 3) are approximate and unverified against official DMV sources.
 const MODES = {
   C:  { name: "Class C (Car)", count: 46, maxWrong: 8 },
   M1: { name: "M1 (Motorcycle)", count: 25, maxWrong: 3 }
@@ -8,38 +9,77 @@ let state = null;
 
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const load = () => { try { return JSON.parse(localStorage.getItem("dmv-stats")) || {}; } catch { return {}; } };
-const save = s => { try { localStorage.setItem("dmv-stats", JSON.stringify(s)); } catch {} };
+const qid = text => { let h = 0; for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0; return String(h); };
+
+const read = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; } };
+const write = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} };
+const loadStats = () => read("dmv-stats", {});
+// progress[k] = { seen: {id: 1}, missed: {id: 1} }
+const loadProgress = () => read("dmv-progress", {});
+function prog(all, k) { return all[k] || (all[k] = { seen: {}, missed: {} }); }
 
 function home() {
-  const stats = load();
-  const line = k => stats[k] ? `Best: ${stats[k].best}/${MODES[k].count} · Attempts: ${stats[k].attempts}` : "No attempts yet";
+  const stats = loadStats(), progress = loadProgress();
   app.innerHTML = `
     <div class="card"><h1>California DMV Practice Test</h1>
-    <p class="muted">Choose a test. Questions are shuffled each time, and you get instant feedback after each answer.</p></div>
-    <div class="modes">
-      ${Object.keys(MODES).map(k => `<button class="mode" data-k="${k}"><b>${MODES[k].name}</b>
-        <span class="muted">${MODES[k].count} questions · pass with ${MODES[k].maxWrong} or fewer wrong</span><br>
-        <span class="muted">${line(k)}</span></button>`).join("")}
-    </div>`;
-  app.querySelectorAll(".mode").forEach(b => b.onclick = () => start(b.dataset.k));
+    <p class="muted">Pick a test. New tests use questions you haven't seen yet first. Questions you miss are saved so you can review them.</p></div>
+    ${Object.keys(MODES).map(k => {
+      const total = window.QUESTIONS[k].length, p = prog(progress, k);
+      const seenCount = window.QUESTIONS[k].filter(r => p.seen[qid(r[0])]).length;
+      const missedCount = window.QUESTIONS[k].filter(r => p.missed[qid(r[0])]).length;
+      const s = stats[k];
+      return `<div class="card">
+        <h2>${MODES[k].name}</h2>
+        <p class="muted">${MODES[k].count} questions · pass with ${MODES[k].maxWrong} or fewer wrong<br>
+        Seen ${seenCount} of ${total} questions · ${s ? `Best: ${s.best}/${MODES[k].count} · Attempts: ${s.attempts}` : "No attempts yet"}</p>
+        <button class="btn" data-act="test" data-k="${k}">Start test</button>
+        <button class="btn secondary" data-act="missed" data-k="${k}" ${missedCount ? "" : "disabled"}>Review missed (${missedCount})</button>
+      </div>`;
+    }).join("")}
+    <button class="btn secondary" id="reset">Reset all progress</button>`;
+  app.querySelectorAll("[data-act]").forEach(b => b.onclick = () => start(b.dataset.k, b.dataset.act));
+  document.getElementById("reset").onclick = () => {
+    if (confirm("Erase your scores, seen questions, and missed questions?")) {
+      try { localStorage.removeItem("dmv-stats"); localStorage.removeItem("dmv-progress"); } catch {}
+      home();
+    }
+  };
 }
 
-function start(k) {
-  const m = MODES[k];
-  const bank = shuffle(window.QUESTIONS[k]).slice(0, m.count).map(([q, opts, ans, exp]) => {
-    const o = shuffle(opts.map((t, i) => ({ t, ok: i === ans })));
-    return { q, o, exp, picked: null };
-  });
-  state = { k, bank, i: 0 };
+function start(k, mode) {
+  const m = MODES[k], p = prog(loadProgress(), k);
+  const items = window.QUESTIONS[k].map(([q, opts, ans, exp]) => ({ id: qid(q), q, opts, ans, exp }));
+  let pool;
+  if (mode === "missed") {
+    pool = shuffle(items.filter(x => p.missed[x.id]));
+  } else {
+    // Unseen first, then previously missed, then the rest.
+    const unseen = shuffle(items.filter(x => !p.seen[x.id]));
+    const missed = shuffle(items.filter(x => p.seen[x.id] && p.missed[x.id]));
+    const rest = shuffle(items.filter(x => p.seen[x.id] && !p.missed[x.id]));
+    pool = shuffle(unseen.concat(missed, rest).slice(0, m.count));
+  }
+  const bank = pool.map(x => ({
+    id: x.id, q: x.q, exp: x.exp, picked: null,
+    o: shuffle(x.opts.map((t, i) => ({ t, ok: i === x.ans })))
+  }));
+  state = { k, mode, bank, i: 0 };
   render();
 }
 
+function record(q) {
+  const all = loadProgress(), p = prog(all, state.k), ok = q.o[q.picked].ok;
+  p.seen[q.id] = 1;
+  if (ok) delete p.missed[q.id]; else p.missed[q.id] = 1;
+  write("dmv-progress", all);
+}
+
 function render() {
-  const { k, bank, i } = state, q = bank[i], m = MODES[k], answered = q.picked !== null;
+  const { k, bank, i, mode } = state, q = bank[i], m = MODES[k], answered = q.picked !== null;
+  const label = mode === "missed" ? `${m.name} · Missed review` : m.name;
   app.innerHTML = `
     <div class="card">
-      <div class="muted">${m.name} · Question ${i + 1} of ${bank.length}</div>
+      <div class="muted">${label} · Question ${i + 1} of ${bank.length}</div>
       <div class="bar"><div style="width:${(i / bank.length) * 100}%"></div></div>
       <h2>${esc(q.q)}</h2>
       ${q.o.map((o, n) => {
@@ -51,31 +91,41 @@ function render() {
     </div>
     <button class="btn" id="next" ${answered ? "" : "disabled"}>${i === bank.length - 1 ? "Finish" : "Next"}</button>
     <button class="btn secondary" id="quit">Quit</button>`;
-  app.querySelectorAll(".opt").forEach(b => b.onclick = () => { q.picked = +b.dataset.n; render(); });
+  app.querySelectorAll(".opt").forEach(b => b.onclick = () => { q.picked = +b.dataset.n; record(q); render(); });
   document.getElementById("next").onclick = () => { if (i === bank.length - 1) finish(); else { state.i++; render(); } };
-  document.getElementById("quit").onclick = () => { if (confirm("Quit this test?")) home(); };
+  document.getElementById("quit").onclick = () => { if (confirm("Quit? Answers you already gave are saved.")) home(); };
 }
 
 function finish() {
-  const { k, bank } = state, m = MODES[k];
+  const { k, bank, mode } = state, m = MODES[k];
   const score = bank.filter(q => q.o[q.picked].ok).length;
-  const wrong = bank.length - score, passed = wrong <= m.maxWrong;
-  const stats = load(), s = stats[k] || { best: 0, attempts: 0 };
-  s.best = Math.max(s.best, score); s.attempts++; stats[k] = s; save(stats);
+  const wrong = bank.length - score;
   const missed = bank.filter(q => !q.o[q.picked].ok);
+  let head;
+  if (mode === "missed") {
+    head = `<div class="result">${score} / ${bank.length} fixed</div><p>Questions you got right are removed from your missed list.</p>`;
+  } else {
+    const passed = wrong <= m.maxWrong;
+    const stats = loadStats(), s = stats[k] || { best: 0, attempts: 0 };
+    s.best = Math.max(s.best, score); s.attempts++; stats[k] = s; write("dmv-stats", stats);
+    head = `<div class="result ${passed ? "pass" : "fail"}">${passed ? "PASS" : "FAIL"}</div>
+      <p>${score} / ${bank.length} correct (${wrong} wrong, max allowed ${m.maxWrong})</p>`;
+  }
+  const remaining = Object.keys(loadProgress()[k]?.missed || {}).length;
   app.innerHTML = `
-    <div class="card">
-      <div class="result ${passed ? "pass" : "fail"}">${passed ? "PASS" : "FAIL"}</div>
-      <p>${score} / ${bank.length} correct (${wrong} wrong, max allowed ${m.maxWrong})</p>
-      <button class="btn" id="again">Retake ${m.name}</button>
+    <div class="card">${head}
+      <button class="btn" id="again">${mode === "missed" ? "Review missed again" : "New test"}</button>
       <button class="btn secondary" id="home">Home</button>
     </div>
-    <div class="card"><h2>Missed questions (${missed.length})</h2>
+    <div class="card"><h2>Missed this round (${missed.length})</h2>
     ${missed.length ? missed.map(q => `<div class="rev"><b>${esc(q.q)}</b><br>
       <span class="fail">Your answer: ${esc(q.o[q.picked].t)}</span><br>
       <span class="pass">Correct: ${esc(q.o.find(o => o.ok).t)}</span><br>
-      <span class="muted">${esc(q.exp)}</span></div>`).join("") : "<p>None. Great job!</p>"}</div>`;
-  document.getElementById("again").onclick = () => start(k);
+      <span class="muted">${esc(q.exp)}</span></div>`).join("") : "<p>None. Great job!</p>"}
+    <p class="muted">${remaining} question${remaining === 1 ? "" : "s"} in your missed list.</p></div>`;
+  document.getElementById("again").onclick = () => {
+    if (mode === "missed" && !remaining) home(); else start(k, mode);
+  };
   document.getElementById("home").onclick = home;
 }
 
