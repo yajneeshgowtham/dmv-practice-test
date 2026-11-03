@@ -1,0 +1,29 @@
+:root{--bg:#f5f7fa;--card:#fff;--text:#1b2430;--muted:#5c6b7c;--accent:#1f6feb;--good:#1a7f37;--bad:#cf222e;--border:#d8dee6}
+@media (prefers-color-scheme:dark){:root{--bg:#10151c;--card:#1a212b;--text:#e8edf3;--muted:#98a6b5;--accent:#58a6ff;--good:#3fb950;--bad:#f85149;--border:#2c3643}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:680px;margin:0 auto;padding:24px 16px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+h1{font-size:1.6rem;margin:0 0 4px}
+h2{font-size:1.2rem;margin:0 0 12px}
+.muted{color:var(--muted);font-size:.9rem}
+button{font:inherit;cursor:pointer}
+.btn{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:12px 18px;margin:4px 4px 4px 0}
+.btn.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mode{background:var(--card);border:2px solid var(--border);border-radius:12px;padding:20px;text-align:left;color:var(--text)}
+.mode:hover,.mode:focus-visible{border-color:var(--accent)}
+.mode b{display:block;font-size:1.2rem}
+.opt{display:block;width:100%;text-align:left;background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin:8px 0}
+.opt:hover:not(:disabled){border-color:var(--accent)}
+.opt.correct{border-color:var(--good);background:color-mix(in srgb,var(--good) 15%,var(--card))}
+.opt.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 15%,var(--card))}
+.bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-bottom:16px}
+.bar>div{height:100%;background:var(--accent)}
+.explain{margin-top:12px;padding:12px;border-left:4px solid var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--card));border-radius:4px}
+.result{font-size:2rem;font-weight:700}
+.pass{color:var(--good)}.fail{color:var(--bad)}
+.rev{border-top:1px solid var(--border);padding:12px 0}
+footer{max-width:680px;margin:0 auto;padding:0 16px 24px;color:var(--muted);font-size:.8rem}
+@media(max-width:480px){.modes{grid-template-columns:1fr}}
