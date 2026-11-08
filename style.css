@@ -27,3 +27,8 @@ button{font:inherit;cursor:pointer}
 .rev{border-top:1px solid var(--border);padding:12px 0}
 footer{max-width:680px;margin:0 auto;padding:0 16px 24px;color:var(--muted);font-size:.8rem}
 @media(max-width:480px){.modes{grid-template-columns:1fr}}
+.sym{display:flex;gap:14px;align-items:center;border-top:1px solid var(--border);padding:10px 0}
+.sym:first-of-type{border-top:0}
+.ico{width:48px;height:48px;flex:none;color:var(--text)}
+.num{display:flex;justify-content:space-between;gap:16px;border-top:1px solid var(--border);padding:10px 0}
+.num b{text-align:right;flex:none;max-width:50%}
